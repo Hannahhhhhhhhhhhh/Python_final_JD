@@ -1,0 +1,103 @@
+import requests # urllib urllib2 
+from bs4 import BeautifulSoup# lxml(xpath)  re(正则表达式)
+import random
+import json
+import time 
+from tqdm import tqdm
+from tqdm._tqdm import trange
+import numpy as np
+import xlwt
+
+import re
+import jieba
+import pandas as pd
+
+# 进一步构建词云可能会用到的包
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+from os import path
+import numpy as np
+from PIL import Image
+
+user_agent = [ 
+	"Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)", 
+	"Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; SV1; AcooBrowser; .NET CLR 1.1.4322; .NET CLR 2.0.50727)", 
+	"Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; Acoo Browser; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; .NET CLR 3.0.04506)", 
+	"Mozilla/4.0 (compatible; MSIE 7.0; AOL 9.5; AOLBuild 4337.35; Windows NT 5.1; .NET CLR 1.1.4322; .NET CLR 2.0.50727)", 
+	"Mozilla/5.0 (Windows; U; MSIE 9.0; Windows NT 9.0; en-US)", 
+	"Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0; .NET CLR 3.5.30729; .NET CLR 3.0.30729; .NET CLR 2.0.50727; Media Center PC 6.0)", 
+	"Mozilla/5.0 (compatible; MSIE 8.0; Windows NT 6.0; Trident/4.0; WOW64; Trident/4.0; SLCC2; .NET CLR 2.0.50727; .NET CLR 3.5.30729; .NET CLR 3.0.30729; .NET CLR 1.0.3705; .NET CLR 1.1.4322)", 
+	"Mozilla/4.0 (compatible; MSIE 7.0b; Windows NT 5.2; .NET CLR 1.1.4322; .NET CLR 2.0.50727; InfoPath.2; .NET CLR 3.0.04506.30)", 
+	"Mozilla/5.0 (Windows; U; Windows NT 5.1; zh-CN) AppleWebKit/523.15 (KHTML, like Gecko, Safari/419.3) Arora/0.3 (Change: 287 c9dfb30)", 
+	"Mozilla/5.0 (X11; U; Linux; en-US) AppleWebKit/527+ (KHTML, like Gecko, Safari/419.3) Arora/0.6", 
+	"Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.8.1.2pre) Gecko/20070215 K-Ninja/2.1.1", 
+	"Mozilla/5.0 (Windows; U; Windows NT 5.1; zh-CN; rv:1.9) Gecko/20080705 Firefox/3.0 Kapiko/3.0", 
+	"Mozilla/5.0 (X11; Linux i686; U;) Gecko/20070322 Kazehakase/0.4.5", 
+	"Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.8) Gecko Fedora/1.9.0.8-1.fc10 Kazehakase/0.5.6", 
+	"Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/535.11 (KHTML, like Gecko) Chrome/17.0.963.56 Safari/535.11", 
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_3) AppleWebKit/535.20 (KHTML, like Gecko) Chrome/19.0.1036.7 Safari/535.20", 
+	"Opera/9.80 (Macintosh; Intel Mac OS X 10.6.8; U; fr) Presto/2.9.168 Version/11.52"
+] 
+
+HEADER = { 
+            'User-Agent': random.choice(user_agent),  # 浏览器头部
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', # 客户端能够接收的内容类型
+            'Accept-Language': 'en-US,en;q=0.5', # 浏览器可接受的语言
+            'Connection': 'keep-alive', # 表示是否需要持久连接
+            } 
+name = 'mac%E5%AD%90%E5%BC%B9%E5%A4%B4' # mac子弹头
+url = 'https://search.jd.com/Search?keyword={}&qrst=1&wq={}&stock=1&ev=exbrand_M.A.C%5E&page=1&s=0&click=0'.format(name,name)
+
+html = requests.get(url,headers = HEADER).text
+soup_html = BeautifulSoup(html,'html5lib')
+lst_li = soup_html.find('div',id="J_goodsList").find_all('li')
+
+url_lst = []  # 保存产品具体界面url
+productId_lst = [] # 保存产品ID
+product_info = [] # 保存产品相关信息
+i=1
+for li in lst_li:
+
+    # 初始界面获得产品价格
+    price = li.find('div',class_="p-price").find('i').text
+    
+    # 获取产品具体界面url
+    product_url = "https:" + li.find('a', target="_blank")['href']
+    productId = re.findall('\d+',product_url)
+    productId_lst.append(productId)
+    url_lst.append(product_url)
+    
+    time.sleep(random.randint(0,3))
+    
+    # 访问产品具体界面
+    further_html = requests.get(product_url,headers = HEADER).text
+    f_soup_html = BeautifulSoup(further_html,'html5lib')
+    
+    # 解析产品界面获得产品名称
+    product_name = f_soup_html.find('div',class_='sku-name').text.strip()
+    
+    # 解析产品界面获得店铺名称
+    shop = f_soup_html.find('div',class_='popbox-inner')
+    shop_name = shop.find('a').text
+    
+    # 获得店铺评分
+    score_list = [] # 依次为：'商品评价','物流履约','售后服务'
+    try:
+        score_html = shop.find('div',class_='score-parts').find_all('em')
+        for s in score_html:
+            try:
+                score = eval(re.findall(r"\d+\.?\d*",s.get_text())[0])
+            except:
+                # 若有缺失值，则填充0
+                score = 0
+            score_list.append(score)
+    except:
+        # 若无店铺评分，则全部填充0
+        score_list = [0 for i in range(3)]
+        
+    product_info.append([productId[0],product_name,price,shop_name,score_list])
+    print(i)
+    i+=1
+  
+  # 查看爬取数据
+  pd.DataFrame(product_info)
