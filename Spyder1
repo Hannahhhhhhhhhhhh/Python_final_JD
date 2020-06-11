@@ -1,3 +1,5 @@
+#爬取mac子弹头的基本信息包括产品价格、好评率、中评率、产品店铺及店铺各项评分
+
 import requests # urllib urllib2 
 from bs4 import BeautifulSoup# lxml(xpath)  re(正则表达式)
 import random
@@ -44,60 +46,183 @@ HEADER = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', # 客户端能够接收的内容类型
             'Accept-Language': 'en-US,en;q=0.5', # 浏览器可接受的语言
             'Connection': 'keep-alive', # 表示是否需要持久连接
-            } 
-name = 'mac%E5%AD%90%E5%BC%B9%E5%A4%B4' # mac子弹头
-url = 'https://search.jd.com/Search?keyword={}&qrst=1&wq={}&stock=1&ev=exbrand_M.A.C%5E&page=1&s=0&click=0'.format(name,name)
+            }
+name_lst = ['Tom Ford黑管口红唇膏','YSL小金条口红','MAC子弹头口红','娇兰亲亲系列口红','迪奥烈艳蓝金口红']
+brand_lst = ['TomFord','YSL','MAC','娇兰','Dior']
+head = ["ID","产品名称","价格","商铺名称","商品评价","物流履约","售后服务","评论数","好评率","中评率","差评率"]
 
-html = requests.get(url,headers = HEADER).text
-soup_html = BeautifulSoup(html,'html5lib')
-lst_li = soup_html.find('div',id="J_goodsList").find_all('li')
+# 设置关键词
+name = name_lst[1]
+brand = brand_lst[1]
+num_page = 0
 
-url_lst = []  # 保存产品具体界面url
-productId_lst = [] # 保存产品ID
+# url_comm_lst = []  # 保存产品评论区域url
+# productId_lst = [] # 保存产品ID
+
+"""
+参数： 
+    head：产品相关信息题头
+    name：产品名称
+    brand：产品所属品牌
+    num_page：记录遍历的搜索页面数量
+    product_info：保存产品相关信息
+    maxPrice：产品的价格上限（排除套餐的情况）
+    startPage：爬取的搜索页面起始页码
+    endPage：爬取的搜索页面终止页码
+    comm_error_tolerance：爬取comments页面出错次数的上限
+    page_to_save：每次自动保存的页数，自动保存后清空
+"""
+
 product_info = [] # 保存产品相关信息
-i=1
-for li in lst_li:
+num_comm_error = 0
+maxPrice = 500
+startPage = 1 
+endPage = 31
+comm_error_tolerance = 10
+page_to_save = 5 
 
-    # 初始界面获得产品价格
-    price = li.find('div',class_="p-price").find('i').text
-    
-    # 获取产品具体界面url
-    product_url = "https:" + li.find('a', target="_blank")['href']
-    productId = re.findall('\d+',product_url)
-    productId_lst.append(productId)
-    url_lst.append(product_url)
-    
-    time.sleep(random.randint(0,3))
-    
-    # 访问产品具体界面
-    further_html = requests.get(product_url,headers = HEADER).text
-    f_soup_html = BeautifulSoup(further_html,'html5lib')
-    
-    # 解析产品界面获得产品名称
-    product_name = f_soup_html.find('div',class_='sku-name').text.strip()
-    
-    # 解析产品界面获得店铺名称
-    shop = f_soup_html.find('div',class_='popbox-inner')
-    shop_name = shop.find('a').text
-    
-    # 获得店铺评分
-    score_list = [] # 依次为：'商品评价','物流履约','售后服务'
-    try:
-        score_html = shop.find('div',class_='score-parts').find_all('em')
-        for s in score_html:
-            try:
-                score = eval(re.findall(r"\d+\.?\d*",s.get_text())[0])
-            except:
-                # 若有缺失值，则填充0
-                score = 0
-            score_list.append(score)
-    except:
-        # 若无店铺评分，则全部填充0
-        score_list = [0 for i in range(3)]
+for page in range(startPage,endPage):
+    s = page * 30 - 30
+    url = 'https://search.jd.com/Search?keyword={}&qrst=1&wq={}&stock=1&page={}&s={}&click=0'.format(name,name,page,s)
+    html = requests.get(url,headers = HEADER).text
+    soup_html = BeautifulSoup(html,'html5lib')
+    lst_li = soup_html.find('div',id="J_goodsList").find_all('li')
+
+    #爬取产品的基本信息包括产品价格、好评率、中评率、产品店铺及店铺各项评分
+    i=1
+    for li in lst_li:
         
-    product_info.append([productId[0],product_name,price,shop_name,score_list])
-    print(i)
-    i+=1
-  
-  # 查看爬取数据
-  pd.DataFrame(product_info)
+        # 爬取基本信息
+        try:
+            # 初始界面获得产品价格
+            price = li.find('div',class_="p-price").find('i').text
+
+            if eval(price) > maxPrice:
+                continue
+            
+#             if eval(price) < 400 or eval(price) > 600:
+#                 continue
+
+            # 获取产品具体界面url
+            product_url = "https:" + li.find('a', target="_blank")['href']
+            productId = re.findall('\d+',product_url)
+#             productId_lst.append(productId)
+
+            time.sleep(np.random.rand()*2)
+
+            # 访问产品具体界面
+            further_html = requests.get(product_url,headers = HEADER).text
+            f_soup_html = BeautifulSoup(further_html,'html5lib')
+
+            # 解析产品界面获得产品名称
+            product_name = f_soup_html.find('div',class_='sku-name').text.strip()
+
+            # 解析产品界面获得店铺名称
+            shop = f_soup_html.find('div',class_='popbox-inner')
+            shop_name = shop.find('a').text
+
+            # 获得店铺评分
+            score_list = [] # 依次为：'商品评价','物流履约','售后服务'
+            try:
+                score_html = shop.find('div',class_='score-parts').find_all('em')
+                for s in score_html:
+                    try:
+                        score = eval(re.findall(r"\d+\.?\d*",s.get_text())[0])
+                    except:
+                        # 若有缺失值，则填充0
+                        score = 0
+                    score_list.append(score)
+            except:
+                # 若无店铺评分，则全部填充0
+                score_list = [0 for i in range(3)]      
+        except:
+            print("基础内容爬取失败")
+            break
+        
+        # 评论区url
+        comm_url = "https://club.jd.com/comment/productPageComments.action?callback=fetchJSON_comment98&productId=%s&score=0&sortType=5&page=%s&pageSize=10&isShadowSku=0&fold=1"%(productId[0],0)
+#         url_comm_lst.append(comm_url)
+        HEADER = { 
+                'User-Agent': random.choice(user_agent),  # 浏览器头部
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', # 客户端能够接收的内容类型
+                'Accept-Language': 'en-US,en;q=0.5', # 浏览器可接受的语言
+                'Connection': 'keep-alive', # 表示是否需要持久连接
+                } 
+        time.sleep(np.random.rand()*3)
+        
+        #访问评论区界面
+        try:
+            further1_html = requests.get(comm_url,headers = HEADER).text
+            f1_soup_html = BeautifulSoup(further1_html,'html5lib')
+
+            response = requests.get(url=comm_url, headers = HEADER)
+            time.sleep(np.random.rand()*2)
+            jsonData = response.text
+            startLoc = jsonData.find('{')
+            data = json.loads(jsonData[startLoc:-2])
+            pageLen = len(data["comments"])
+        except:
+            print("访问评论失败")
+            num_comm_error += 1 
+            
+        if num_comm_error > comm_error_tolerance:
+            print("num_comm_error > "+str(comm_error_tolerance))
+            break
+            
+        # 解析评论页面
+        try:
+             #获得评论总数
+            comments_all = data['productCommentSummary']['commentCount']
+
+            # 获得评论区好评率
+            goodRate = data['productCommentSummary']['goodRate']
+
+            #获得中评率
+            generalRate = data['productCommentSummary']['generalRate']
+
+            #获得差评率
+            poorRate = data['productCommentSummary']['poorRate']
+        except:
+            print('获得评论数，好中差评率Error')
+            comments_all,goodRate,generalRate,poorRate = 0,0,0,0
+        
+        product_info.append([productId[0],product_name,price,shop_name,score_list[0],score_list[1],score_list[2],comments_all,goodRate,generalRate,poorRate])
+
+        print(page,"+",i,end="   ")
+        i+=1
+        time.sleep(np.random.rand()*2)
+        
+    if num_comm_error > comm_error_tolerance:
+        print("num_comm_error > "+str(comm_error_tolerance))
+        break
+        
+    num_page += 1 
+    print(product_name)
+    print('\n'+"----------------------------------No."+str(num_page)+"----------------------------------")
+    time.sleep(5)
+
+    if num_page % page_to_save == 0:
+        # 若遍历搜索页面次数是page_to_save的倍数，则自动保存
+        
+        # 自动保存文件
+        df_product_info = pd.DataFrame(product_info, columns=head)
+        df_product_info.to_csv('productInfo_{}_{}.csv'.format(brand,int(num_page/page_to_save)), encoding="utf-8")
+
+        # 更新
+#         url_comm_lst = []  # 保存产品评论区域url
+#         productId_lst = [] # 保存产品ID
+        product_info = [] # 保存产品相关信息
+        num_comm_error = 0
+
+        print("Refresh!!!!!!!")
+
+# 手动保存文件
+df_product_info = pd.DataFrame(product_info, columns=head)
+df_product_info.to_csv('productInfo_{}_4.csv'.format(brand), encoding="utf-8")
+
+# 分别保存的文件合并
+df = []
+for i in range(1,5):
+    df.append(pd.read_csv('productInfo_{}_{}.csv'.format(brand,i)))
+df_all = pd.concat([df[0],df[1],df[2],df[3]])
+df_all.to_csv('productInfo_{}_all.csv'.format(brand), encoding="utf-8")
