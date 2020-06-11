@@ -1,0 +1,95 @@
+def get_comments(productId,user_agent):
+    """
+    功能：爬取指定productId商品的评论
+    爬取内容：用户id, 评论, 评论时间, 购买时间, Score
+    """
+    all_comments = ""
+#     查到productId的方法
+#     右键-Network-点击“商品评论”-productPageComments.action
+
+    list_comment = []
+    for page in range(50):
+        url1 = "https://club.jd.com/comment/productPageComments.action?callback=fetchJSON_comment98\
+        &productId=%s&score=0&sortType=5&page=%s&pageSize=10&isShadowSku=0&fold=1"%(productId,page)
+        HEADER = { 
+                'User-Agent': random.choice(user_agent),  # 浏览器头部
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', # 客户端能够接收的内容类型
+                'Accept-Language': 'en-US,en;q=0.5', # 浏览器可接受的语言
+                'Connection': 'keep-alive', # 表示是否需要持久连接
+                } 
+        try:
+            response = requests.get(url=url1, headers = HEADER)
+            time.sleep(np.random.rand()*2)
+            jsonData = response.text
+            startLoc = jsonData.find('{')
+            data = json.loads(jsonData[startLoc:-2])
+            pageLen = len(data["comments"])
+            print(pageLen,end=" ")
+            for j in range(pageLen):
+                sig_comment = []
+                userId = data["comments"][j]["id"] # 用户id
+                content = data["comments"][j]["content"] #评论内容
+                creationTime = data["comments"][j]["creationTime"] #评论时间
+                boughtTime = data["comments"][j]["referenceTime"] # 购买时间
+                score = data["comments"][j]["score"]
+                sig_comment.append(str(page)+"-"+str(j))
+                sig_comment.append(userId)
+                sig_comment.append(content)
+                sig_comment.append(creationTime)
+                sig_comment.append(boughtTime)
+                sig_comment.append(score)
+                list_comment.append(sig_comment) 
+                all_comments = all_comments+content
+        except:
+            time.sleep(4)
+            print("Error")
+            
+    return list_comment, all_comments
+    
+"""
+手动获取官方店铺某系列某热门口红的品牌名称和productID
+"""
+brand = "MAC"
+productId = "100002478996"
+list_comment, all_comments = get_comments(productId,user_agent)
+
+df_comment_list = pd.DataFrame(list_comment,columns=['序号','用户ID','评论内容','评论时间','购买时间','打分'])
+
+# 评论列表写入CSV文件
+df_comment_list.to_csv("comments_{}_{}.csv".format(brand,productId))
+# 所有文字评论写入txt文件
+with open ("ALLcomments_{}_{}.txt".format(brand,productId), 'a',encoding='utf-8') as f:
+    f.write(all_comments)
+f.close()
+
+
+
+"""
+生成词云
+"""
+# 评论数据清洗
+def data_clear(all_comments):
+    xt = all_comments
+    pattern = re.compile(r'[\u4e00-\u9fa5]+')
+    filedata = re.findall(pattern, xt)
+    xx = ''.join(filedata)
+    clear = jieba.lcut(xx)   # 切分词
+    cleared = pd.DataFrame({'clear': clear})
+    stopwords = pd.read_csv("chineseStopWords.txt", index_col=False, quoting=3, sep="\t", names=['stopword'], encoding='GBK')
+    cleared = cleared[~cleared.clear.isin(stopwords.stopword)]
+    count_words = cleared.groupby(by=['clear'])['clear'].agg({"num": np.size})
+    count_words = count_words.reset_index().sort_values(by=["num"], ascending=False)
+    return count_words
+
+#词云展示模块
+def make_wordclound(all_comments):
+    wordcloud = WordCloud(font_path="simhei.ttf",background_color="#EEEEEE",max_font_size=250,width=1300,height=800) #指定字体类型、字体大小和字体颜色
+    word_frequence = {x[0]:x[1] for x in data_clear(all_comments).head(200).values}
+    wordcloud = wordcloud.fit_words(word_frequence)
+    plt.imshow(wordcloud)
+    plt.axis("off")
+    plt.colorbar()   #颜色条
+    plt.show()
+   
+make_wordclound(all_comments)
+print("finish")
